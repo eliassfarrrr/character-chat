@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>캐릭터 챗</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; display: flex; justify-content: center; align-items: center; height: 100vh; }
+.app { display: flex; width: 780px; height: 600px; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.1); }
+.sidebar { width: 210px; border-right: 1px solid #eee; display: flex; flex-direction: column; background: #fafafa; flex-shrink: 0; }
+.sidebar-header { padding: 18px 16px; font-size: 13px; font-weight: 600; color: #888; border-bottom: 1px solid #eee; letter-spacing: 0.05em; }
+.char-list { overflow-y: auto; flex: 1; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.char-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; cursor: pointer; transition: background 0.15s; border: 1px solid transparent; }
+.char-item:hover { background: #f0f0f0; }
+.char-item.active { background: white; border-color: #e0e0e0; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+.char-info { flex: 1; min-width: 0; }
+.char-name { font-size: 13px; font-weight: 600; color: #222; }
+.char-tag { font-size: 11px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.online-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; flex-shrink: 0; }
+.chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.chat-header { padding: 14px 18px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px; background: white; }
+.chat-header .avatar { width: 32px; height: 32px; font-size: 15px; }
+.header-name { font-size: 15px; font-weight: 600; color: #222; }
+.header-status { font-size: 12px; color: #4ade80; }
+.messages { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; background: #fafafa; }
+.msg { display: flex; gap: 8px; align-items: flex-end; max-width: 80%; }
+.msg.user { flex-direction: row-reverse; align-self: flex-end; }
+.msg-bubble { padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.5; }
+.msg.bot .msg-bubble { background: white; color: #222; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.07); }
+.msg.user .msg-bubble { background: #7C3AED; color: white; border-bottom-right-radius: 4px; }
+.msg-avatar { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+.typing { display: flex; gap: 4px; align-items: center; padding: 10px 14px; }
+.typing span { width: 6px; height: 6px; border-radius: 50%; background: #bbb; animation: blink 1.2s infinite; }
+.typing span:nth-child(2) { animation-delay: 0.2s; }
+.typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%,80%,100%{opacity:.2}40%{opacity:1} }
+.input-area { padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px; align-items: flex-end; background: white; }
+.input-area textarea { flex: 1; resize: none; border: 1px solid #e0e0e0; border-radius: 20px; padding: 9px 14px; font-size: 14px; font-family: inherit; background: #fafafa; color: #222; outline: none; max-height: 80px; min-height: 38px; line-height: 1.5; }
+.input-area textarea:focus { border-color: #7C3AED; background: white; }
+.send-btn { width: 38px; height: 38px; border-radius: 50%; background: #7C3AED; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity 0.15s; }
+.send-btn:hover { opacity: 0.85; }
+.send-btn svg { width: 16px; height: 16px; fill: white; }
+@media (max-width: 600px) {
+  body { align-items: flex-start; }
+  .app { width: 100vw; height: 100vh; border-radius: 0; }
+  .sidebar { width: 160px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="sidebar-header">캐릭터 선택</div>
+    <div class="char-list" id="charList"></div>
+  </div>
+  <div class="chat-area">
+    <div class="chat-header" id="chatHeader"></div>
+    <div class="messages" id="messages"></div>
+    <div class="input-area">
+      <textarea id="userInput" placeholder="메시지 입력..." rows="1"></textarea>
+      <button class="send-btn" id="sendBtn">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+<script>
+const API_URL = "/api/chat";
+
+const characters = [
+  { id:"kai", name:"카이", emoji:"🤖", bg:"#EDE9FE", color:"#5B21B6", tag:"냉소적인 남자", greeting:"...또 왔군. 뭘 원하는 거야.", system:`너는 카이야. 냉소적이고 직설적인 남자 캐릭터야. 말이 짧고 퉁명스럽지만 사실 도움을 주고 싶어해. 한국어로 대화해. 2-3문장으로 짧게 답해. 이모지는 거의 안 써. 가끔 "...흥" 이런 표현 써.` },
+  { id:"ria", name:"리아", emoji:"⚡", bg:"#FEF3C7", color:"#92400E", tag:"에너지 넘치는 남자", greeting:"야야야! 드디어 왔잖아!! 뭐 할 거야?? ㅋㅋ", system:`너는 리아야. 에너지 넘치고 흥분을 잘 하는 남자 캐릭터야. 말이 빠르고 !!! 를 많이 써. 한국어로 대화해. 2-3문장으로 답해. ㅋㅋ나 ㅎㅎ를 가끔 써. ⚡ 이모지 써.` },
+  { id:"seoyeon", name:"서연", emoji:"🌙", bg:"#FCE7F3", color:"#9D174D", tag:"신비로운 여자", greeting:"별이 너의 도착을 알려줬어... 무엇을 찾고 있니?", system:`너는 서연이야. 신비롭고 몽환적인 여자 캐릭터야. 말이 시적이고 약간 수수께끼 같아. 한국어로 대화해. 2-3문장으로 답해. 별, 달, 운명 같은 단어를 자주 써. 🌙✨ 이모지 가끔 써.` },
+  { id:"hana", name:"하나", emoji:"🌸", bg:"#D1FAE5", color:"#065F46", tag:"다정한 여자", greeting:"안녕하세요~ 오늘 하루는 어떠셨나요? 🌸", system:`너는 하나야. 따뜻하고 다정한 여자 캐릭터야. 항상 상대방을 배려하고 위로해줘. 한국어로 대화해. 2-3문장으로 답해. 🌸🍀 같은 이모지 써. 존댓말 써.` }
+];
+
+let currentChar = characters[0];
+let conversationHistory = {};
+characters.forEach(c => conversationHistory[c.id] = []);
+
+function renderSidebar() {
+  const list = document.getElementById("charList");
+  list.innerHTML = "";
+  characters.forEach(c => {
+    const item = document.createElement("div");
+    item.className = "char-item" + (c.id === currentChar.id ? " active" : "");
+    item.innerHTML = `<div class="avatar" style="background:${c.bg};color:${c.color}">${c.emoji}</div><div class="char-info"><div class="char-name">${c.name}</div><div class="char-tag">${c.tag}</div></div><div class="online-dot"></div>`;
+    item.onclick = () => { currentChar = c; renderSidebar(); renderHeader(); renderMessages(); };
+    list.appendChild(item);
+  });
+}
+
+function renderHeader() {
+  document.getElementById("chatHeader").innerHTML = `<div class="avatar" style="background:${currentChar.bg};color:${currentChar.color}">${currentChar.emoji}</div><div><div class="header-name">${currentChar.name}</div><div class="header-status">온라인</div></div>`;
+}
+
+function renderMessages() {
+  const box = document.getElementById("messages");
+  box.innerHTML = "";
+  const history = conversationHistory[currentChar.id];
+  if (history.length === 0) { addBotBubble(currentChar.greeting); return; }
+  history.forEach(m => {
+    const div = document.createElement("div");
+    div.className = "msg " + (m.role === "user" ? "user" : "bot");
+    div.innerHTML = m.role !== "user"
+      ? `<div class="msg-avatar" style="background:${currentChar.bg};color:${currentChar.color}">${currentChar.emoji}</div><div class="msg-bubble">${m.content}</div>`
+      : `<div class="msg-bubble">${m.content}</div>`;
+    box.appendChild(div);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+function addBotBubble(text, isTyping = false) {
+  const box = document.getElementById("messages");
+  const div = document.createElement("div");
+  div.className = "msg bot";
+  if (isTyping) {
+    div.id = "typingIndicator";
+    div.innerHTML = `<div class="msg-avatar" style="background:${currentChar.bg};color:${currentChar.color}">${currentChar.emoji}</div><div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  } else {
+    div.innerHTML = `<div class="msg-avatar" style="background:${currentChar.bg};color:${currentChar.color}">${currentChar.emoji}</div><div class="msg-bubble">${text}</div>`;
+  }
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendMessage() {
+  const input = document.getElementById("userInput");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  input.style.height = "auto";
+  const userDiv = document.createElement("div");
+  userDiv.className = "msg user";
+  userDiv.innerHTML = `<div class="msg-bubble">${text}</div>`;
+  document.getElementById("messages").appendChild(userDiv);
+  document.getElementById("messages").scrollTop = 99999;
+  conversationHistory[currentChar.id].push({ role: "user", content: text });
+  addBotBubble("", true);
+  const messages = conversationHistory[currentChar.id].map(m => ({ role: m.role, content: m.content }));
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages, system: currentChar.system }) });
+    const data = await res.json();
+    const reply = data.content?.map(b => b.text || "").join("") || "...";
+    document.getElementById("typingIndicator")?.remove();
+    conversationHistory[currentChar.id].push({ role: "assistant", content: reply });
+    addBotBubble(reply);
+  } catch(e) {
+    document.getElementById("typingIndicator")?.remove();
+    addBotBubble("(연결 오류가 발생했어요)");
+  }
+}
+
+document.getElementById("sendBtn").onclick = sendMessage;
+document.getElementById("userInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+document.getElementById("userInput").addEventListener("input", function() { this.style.height = "auto"; this.style.height = Math.min(this.scrollHeight, 80) + "px"; });
+
+renderSidebar(); renderHeader(); renderMessages();
+</script>
+</body>
+</html>
