@@ -142,8 +142,8 @@ async function sendMessage() {
   const messages = conversationHistory[currentChar.id].map(m => ({ role: m.role, content: m.content }));
   try {
     const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages, system: currentChar.system }) });
-    const data = await res.json();
-    const reply = data.content?.map(b => b.text || "").join("") || "...";
+   const data = await res.json();
+const reply = data.content?.map(b => b.text || "").join("") || JSON.stringify(data);
     document.getElementById("typingIndicator")?.remove();
     conversationHistory[currentChar.id].push({ role: "assistant", content: reply });
     addBotBubble(reply);
